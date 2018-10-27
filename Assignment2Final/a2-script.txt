@@ -1,0 +1,178 @@
+
+--Question 1
+SELECT DISTINCT members.name, members.email
+FROM cars c1, cars c2, rides, members
+WHERE ((members.email = c1.owner) and (c1.owner = c2.owner) and (c1.cno<>c2.cno)) and ((c1.cno = rides.cno) or (c2.cno = rides.cno));
+Chris Eng|chrise@a.com
+Joe Anderson|joe@gmail.com
+Ted Walsh|tedwalsh@td.com
+
+--Question 2
+SELECT DISTINCT members.name, members.email
+FROM members, rides, cars, bookings
+WHERE (members.email = cars.owner) and (cars.seats = bookings.seats)
+EXCEPT
+SELECT members.name, rides.driver
+FROM members, rides;
+Grace Evans|gc@art.com
+Mary Smith|mary@abc.com
+
+--Question 3
+SELECT DISTINCT members.email
+FROM members, rides, locations, bookings
+WHERE (members.email = bookings.email) and (bookings.rno = rides.rno) and (rides.rdate LIKE '2018-11%')
+and (rides.dst = locations.lcode) and (locations.city = 'Calgary')
+INTERSECT
+SELECT DISTINCT members.email
+FROM members, rides, locations, bookings
+WHERE (members.email = bookings.email) and (bookings.rno = rides.rno) and (rides.rdate LIKE '2018-11%')
+and (rides.src = locations.lcode) and (locations.city = 'Edmonton');
+chrise@a.com
+gc@art.com
+paul@a.com
+
+--Question 4
+SELECT requests.rid,requests.email,requests.pickup,requests.dropoff,rides.rno
+FROM requests,rides,locations startreq, locations startrid, locations finreq, locations finrid
+WHERE (requests.rdate = rides.rdate) and (rides.price<=requests.amount) and (requests.pickup = startreq.lcode)
+and (requests.dropoff = finreq.lcode) and (rides.src = startrid.lcode) and (rides.dst = finrid.lcode) 
+and (startreq.city = startrid.city) and (finreq.prov = finrid.prov);
+4|whatever@e.com|ab2|ab4|101
+5|mary@abc.com|ab2|ab4|101
+6|joe@gmail.com|ab7|bc1|104
+7|tedwalsh@td.com|ab2|on1|121
+8|gc@art.com|ab3|ab6|117
+
+--Question 5
+SELECT DISTINCT city
+FROM 
+
+(SELECT testable2.city, testable2.prov, SUM(RidesTo) AS TotalRidesTo
+	FROM
+		(SELECT L2.city,L2.prov, (SELECT COUNT(rides.dst)
+			FROM rides
+			WHERE L2.lcode = rides.dst) 
+		RidesTo
+		FROM locations L2) 
+	testable2
+	GROUP BY testable2.city
+	ORDER BY TotalRidesTo desc)
+LIMIT 3;
+Calgary
+Red Deer
+Toronto
+
+--Question 6
+SELECT a.city, b.prov, a.TotalRidesFrom, b.TotalRidesTo, c.TotalEnroutes
+FROM
+	(SELECT testable1.city, testable1.prov, SUM(RidesFrom) AS TotalRidesFrom  --sum the rides
+	From
+		(SELECT L1.city,L1.prov, (SELECT COUNT(rides.src)  --count # of found lcodes
+			FROM rides
+			WHERE L1.lcode = rides.src) 
+		RidesFrom
+		FROM locations L1) 
+	testable1
+	GROUP BY testable1.city)
+a
+LEFT JOIN
+	(SELECT testable2.city, testable2.prov, SUM(RidesTo) AS TotalRidesTo
+	FROM
+		(SELECT L2.city,L2.prov, (SELECT COUNT(rides.dst)
+			FROM rides
+			WHERE L2.lcode = rides.dst) 
+		RidesTo
+		FROM locations L2) 
+	testable2
+	GROUP BY testable2.city) 
+b
+ON a.city = b.city
+LEFT JOIN
+	(SELECT testable3.city,testable3.prov, SUM(EnrouteNum) AS TotalEnroutes
+	FROM
+		(SELECT L3.city, L3.prov, (SELECT COUNT(enroute.lcode)
+			FROM enroute
+			WHERE L3.lcode = enroute.lcode)
+		EnrouteNum
+		From locations L3)
+	testable3
+	GROUP BY testable3.city)
+c
+ON (b.city = c.city);
+Calgary|Alberta|0|12|1
+Edmonton|Alberta|26|2|0
+Mississauga|Ontario|0|2|0
+Red Deer|Alberta|1|7|6
+Toronto|Ontario|1|3|0
+Vancouver|British Columbia|0|2|0
+Winnipeg|Manitoba|0|0|1
+
+--Question 7
+SELECT tab1.rno
+FROM
+	--this table tab1 is a table that list rides and prices with available seats. If a rno is not booked, the rno is automatically listed
+	--if the rno is booked, we check to see if there are any seats left by going, (rides.seats-bookings.seats) > 0
+	(SELECT DISTINCT rides.rno, rides.price
+	FROM rides r1, rides, locations L1, locations L2, bookings
+	WHERE ((rides.src = L1.lcode) and (L1.city = 'Edmonton') and (rides.dst = L2.lcode) and (L2.city = 'Calgary')
+	and (rides.rdate LIKE '2018-10%') and (rides.rno <> bookings.rno)) OR ((rides.src = L1.lcode) and (L1.city = 'Edmonton') 
+	and (rides.dst = L2.lcode) and (L2.city = 'Calgary') and (rides.rdate LIKE '2018-10%') and (rides.rno = bookings.rno) and ((rides.seats-bookings.seats) > 0)))
+tab1
+--select the rno where the price is equal to the minimum price of rides. Doing this will allow to list the cheapest ride. 
+--Or if there are multiple rno's that do indeed have the minimum price, those will be listed as well.
+where tab1.price =
+	(SELECT min(rides.price)
+	from rides, locations L1, locations L2, bookings
+	WHERE (rides.src = L1.lcode) and (L1.city = 'Edmonton') and (rides.dst = L2.lcode) and (L2.city = 'Calgary')
+	and (rides.rdate LIKE '2018-10%') and (rides.rno <> bookings.rno));
+114
+127
+
+--the cheapest ride from Edmonton to Calgary." In the set of rides from Edmonton to Calgary with available seats*
+
+--Question 8
+Select mytable.driver
+from
+    (Select DISTINCT rides.driver , count(locations.prov) NumOffered
+	from rides left join locations ON rides.dst = locations.lcode
+	where locations.prov = 'Alberta' and DATE(rides.rdate) >= '2016-00-00'
+	group by rides.driver
+	) mytable
+where mytable.NumOffered >  
+--total ammount locations in alberta / 2
+(Select count(*)
+from locations
+where locations.prov = 'Alberta')/2;
+chrise@a.com
+joe@gmail.com
+
+--Question 9
+CREATE VIEW ride_info(rno,booked,available,rdate,price,src,dst)
+AS SELECT r.rno, COALESCE(SUM(b.seats),0) TotalBook, r.seats-COALESCE(SUM(b.seats),0),r.rdate,r.price,L1.city,L2.city
+FROM rides r left join bookings b on r.rno = b.rno left join locations L1 on r.src = L1.lcode left join 
+locations L2 on r.dst = L2.lcode
+group by r.rno;
+
+--Question 10
+SELECT ride_info.rno, ride_info.booked, ride_info.available,
+ride_info.rdate, ride_info.price, ride_info.src, ride_info.dst,
+members.email,(julianday('2019-01-01') - julianday(ride_info.rdate)) Timesince
+FROM ride_info, members, rides
+Where (ride_info.src = 'Edmonton') and (ride_info.dst = 'Calgary') and 
+(ride_info.rdate LIKE '2018-12%') and (ride_info.rno = rides.rno) and 
+(rides.driver = members.email)
+Order By ride_info.price;
+126|0|4|2018-12-30|27|Edmonton|Calgary|tedwalsh@td.com|2.0
+124|0|3|2018-12-27|30|Edmonton|Calgary|joe@gmail.com|5.0
+125|0|3|2018-12-01|31|Edmonton|Calgary|chrise@a.com|31.0
+
+
+
+
+
+
+
+
+
+
+
